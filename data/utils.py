@@ -128,14 +128,17 @@ class FaceForensics(VideoDataset):
             self.methods.append("original_sequences")
 
         self.video_paths = []
+        print(f"Searching for videos in {self.root}")
+        print(f"Methods: {self.methods}")
         for method in self.methods:
             if method == "original_sequences":
                 method_root = self.root / "original_sequences"
             else:
                 method_root = self.root / "manipulated_sequences" / method
             method_root = method_root / self.compression
-            self.video_paths.extend(list(method_root.rglob("*.mp4")))
+            self.video_paths.extend(list((method_root / "videos").rglob("*.mp4")))
 
+        print(f"Found {len(self.video_paths)} videos to process")
         # remove videos that have already been processed
         self.video_paths = [
             video_path
@@ -146,6 +149,7 @@ class FaceForensics(VideoDataset):
                 ).exists()
             )
         ]
+
 
     def __len__(self) -> int:
         return len(self.video_paths)

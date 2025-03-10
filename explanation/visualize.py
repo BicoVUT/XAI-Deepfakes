@@ -1,35 +1,36 @@
 import torch
 from torchvision.transforms import v2
 import sys
-sys.path.append('../src')
-sys.path.append('./methods')
+# Simplified sys.path modification:
+sys.path.append("..")  # Add the parent directory (project root) to the path
 from model.frame import FrameModel
 import numpy as np
-from data.datasets import DeepfakeDataset
-from methods.gradcam_xai import explain as GradCAM
-from methods.rise_xai import explain as RISE
-from methods.shap_xai import explain as SHAP
-from methods.lime_xai import explain as LIME
-from methods.sobol_xai import explain as SOBOL
 from decimal import Decimal
+import cv2  # Import OpenCV for image loading
+
+# --- Configuration (Adjust these) ---
+
+# Choose ONE explanation method.  Start with GradCAM++ or LIME.
+explanation_method = "GradCAM++"
+#explanation_method = "LIME"
+#explanation_method = "RISE"
+#explanation_method = "SHAP"
+#explanation_method = "SOBOL"
 
 
+# Path to your test image (ABSOLUTE path is safest)
+dataset_example_index = "/mnt/d/REPOS/XAI-Deepfakes/explanation/methods/testing_NT.jpg"  # Example with the provided image
+# dataset_example_index = "/path/to/your/downloaded/image.jpg" # Or, path to your own image
 
+# --- Model Loading ---
 
-#"GradCAM++" - "RISE" - "SHAP" - "LIME" - "SOBOL"
-explanation_method="LIME"
-#"random" or int of the index of the example
-dataset_example_index="random"
-
-
-
-
-#Load the model
 rs_size = 224
-model = FrameModel.load_from_checkpoint("../model/checkpoint/ff_attribution.ckpt",map_location='cuda').eval()
+# Use map_location='cpu' if you have GPU issues.  Try 'cuda' first, then 'cpu'.
+model = FrameModel.load_from_checkpoint("../model/checkpoint/ff_attribution.ckpt", map_location=torch.device('cpu')).eval()
 task = "multiclass"
 
-#Create the transforms for inference and visualization purposes
+# --- Image Transforms (Keep these, they're important) ---
+
 interpolation = 3
 inference_transforms = v2.Compose([
     v2.ToImage(),
@@ -43,68 +44,60 @@ visualize_transforms = v2.Compose([
     v2.ToDtype(torch.float32, scale=True),
 ])
 
-#Load the dataset
-ds_path = "../data/csvs/ff_test.csv"
+# --- Image Loading (Modified to use OpenCV) ---
 
-#Dataset with inference transformations
-target_transforms = lambda x: torch.tensor(x, dtype=torch.float32)
-ds = DeepfakeDataset(
-    ds_path,
-    "../data/xai_test_data.lmdb",
-    transforms=inference_transforms,
-    target_transforms=target_transforms,
-    task=task
-)
-#Dataset with visualization transformations
-ds_visualize = DeepfakeDataset(
-    ds_path,
-    "../data/xai_test_data.lmdb",
-    transforms=visualize_transforms,
-    target_transforms=target_transforms,
-    task=task
-)
+# Load the image using OpenCV
+image = cv2.imread(dataset_example_index)
+if image is None:
+    raise FileNotFoundError(f"Could not load image at {dataset_example_index}")
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert from BGR (OpenCV) to RGB
 
-#Set the example index
-if (dataset_example_index=="random"):
-    idx = np.random.randint(0, len(ds))
-else:
-    idx = dataset_example_index
+# Apply the transforms
+inference_image = inference_transforms(image)
+visualize_image = visualize_transforms(image)
 
-#Get the images
-inference_image, label_real = ds[idx]
-visualize_image, _ = ds_visualize[idx]
+# --- Dummy Label ---
+# We don't have a real label, so create a dummy one.  It doesn't matter for visualization.
+label_real = torch.tensor([0], dtype=torch.float32)
 
-#Compute the inference scores
+# --- Inference (Keep this) ---
+
 with torch.no_grad():
-    frame = inference_image.to(model.device)
-    output = model(frame.unsqueeze(0))
+    frame = inference_image.to(model.device)  # Move to GPU if available, otherwise CPU
+    output = model(frame.unsqueeze(0))  # Add a batch dimension (unsqueeze)
 
 output = output.cpu().reshape(-1, ).numpy()
-real_label=int(label_real.reshape(-1, ).numpy()[0])
+real_label = int(label_real.reshape(-1, ).numpy()[0])
 
-#Print the inference scores, the predicted and the ground truth label
-print("Output scores: ",end='')
+print("Output scores: ", end='')
 for o in output:
-    o=Decimal(str(o))
-    print(format(o, 'f') ,end=' ')
-print("\nPredicted label: "+ str(np.argmax(output)))
-print("Real label: "+ str(real_label))
+    o = Decimal(str(o))
+    print(format(o, 'f'), end=' ')
+print("\nPredicted label: " + str(np.argmax(output)))
+print("Real label: " + str(real_label))
 
-#Set the predicted label for explanation
 explanation_label_index = np.argmax(output)
 print("\nExplaining predicted label")
 
-#Call the corresponding explanation method to calculate the explanation
-if(explanation_method == "GradCAM++"):
+
+# --- Explanation (Modified for dynamic import) ---
+if explanation_method == "GradCAM++":
+    from methods.gradcam_xai import explain as GradCAM
     GradCAM(inference_image, visualize_image.permute(1, 2, 0).numpy(), explanation_label_index, model)
-elif(explanation_method == "RISE"):
+elif explanation_method == "RISE":
+    from methods.rise_xai import explain as RISE
     RISE(inference_image, visualize_image.unsqueeze(0), explanation_label_index, model)
-elif (explanation_method == "SHAP"):
+elif explanation_method == "SHAP":
+    from methods.shap_xai import explain as SHAP
     SHAP(inference_image, visualize_image.permute(1, 2, 0).numpy(), explanation_label_index, model)
-elif (explanation_method == "LIME"):
+elif explanation_method == "LIME":
+    from methods.lime_xai import explain as LIME
     LIME(visualize_image.permute(1, 2, 0).numpy(), inference_transforms, explanation_label_index, model)
-elif (explanation_method == "SOBOL" ):
+elif explanation_method == "SOBOL":
+    from methods.sobol_xai import explain as SOBOL
     SOBOL(inference_image, visualize_image, explanation_label_index, model)
 else:
     print("Incorrect explanation method")
     sys.exit(0)
+
+print("Visualization complete. Check the output in the 'explanation' directory.")

@@ -1,24 +1,24 @@
-import os
 import sys
+import os
 import warnings
 import pandas as pd
 import numpy as np
 import torch
 from torchvision.transforms import v2
-sys.path.append('../src')
-sys.path.append('./methods')
-from model.frame import FrameModel
-from data.datasets import DeepfakeDataset
-from evaluation.compute_metrics import computeExplanationMetrics
-from evaluation.generate_ff_test_data import getFFPath
+# sys.path.append('../src')   # REMOVE THESE LINES
+# sys.path.append('./methods') # REMOVE THESE LINES
+# Add the project root to sys.path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
 
-
+from model.frame import FrameModel  # Corrected relative import
+from data.datasets import DeepfakeDataset  # Corrected relative import
+from evaluation.compute_metrics import computeExplanationMetrics #NO DOT
+from evaluation.generate_ff_test_data import getFFPath #NO DOT
 
 
 #"GradCAM++" - "RISE" - "SHAP" - "LIME" - "SOBOL" - "All"
 evaluation_explanation_methods="All"
-
-
 
 
 valid_methods=["GradCAM++", "RISE", "SHAP", "LIME", "SOBOL", "All"]
@@ -46,7 +46,7 @@ visualize_transforms = v2.Compose([
 ])
 
 #Create the deepfake test examples and load the dataset
-ds_path = getFFPath("../data/csvs/ff_test.csv")
+ds_path = getFFPath("../data/csvs/ff_Smaller_test.csv")
 
 #Dataset with inference transformations
 target_transforms = lambda x: torch.tensor(x, dtype=torch.float32)
@@ -85,7 +85,7 @@ with warnings.catch_warnings():
 
 #Create a dataframe and save the results in a csv
 if(evaluation_explanation_methods=="All"):
-    index_values = ["Original", "GradCAM++", "RISE", "SHAP", "LIME", "SOBOL"]
+    index_values = ["Original", "GradCAM++", "LIME"]
 else:
     index_values = ["Original", evaluation_explanation_methods]
 

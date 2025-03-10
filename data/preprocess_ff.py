@@ -41,7 +41,7 @@ def cli():
     default=["NeuralTextures", "Face2Face", "Deepfakes", "FaceSwap"],
     help="Methods",
 )
-@click.option("--compression", "-c", type=str, default="c23", help="Compression")
+@click.option("--compression", "-c", type=str, default="c40", help="Compression")
 @click.option("--device", "-d", type=str, required=True, help="Device", default="cuda:0")
 @click.option("--batch_size", "-bs", type=int, default=64, help="Batch size")
 @click.option("--threshold", "-t", type=float, default=0.95, help="Threshold")
@@ -94,16 +94,17 @@ def prepro(
     multiple_face_videos = {}
 
     dataset = FaceForensics(
-        args["root"],
-        args["target_root"],
-        [*args["methods"]],
-        args["include_original"],
-        args["compression"],
+        root,
+        target_root,
+        ["NeuralTextures", "Face2Face", "Deepfakes", "FaceSwap"],
+        include_original,
+        compression,
     )
+
     loader = DataLoader(
         dataset,
         batch_size=1,
-        num_workers=args["num_workers"],
+        num_workers=num_workers,
         shuffle=False,
         collate_fn=lambda x: x[0],
     )
@@ -199,28 +200,28 @@ def handle_metadata(metadata_csv, target_root):
     )  # get unique paths of videos, not frames
     labels = [0 if "original" in x.parts[0] else 1 for x in samples]
     samples = list(zip(samples, labels))
-    samples = pd.DataFrame(samples, columns=["c23_path", "bin_label"])
-    samples["c23_path"] = samples["c23_path"].apply(lambda x: x.as_posix())
-    samples = samples.merge(metadata, how="left", on="c23_path")
-    samples["c23_path"] = samples["c23_path"].apply(
+    samples = pd.DataFrame(samples, columns=["c40_path", "bin_label"])
+    samples["c40_path"] = samples["c40_path"].apply(lambda x: x.as_posix())
+    samples = samples.merge(metadata, how="left", on="c40_path")
+    samples["c40_path"] = samples["c40_path"].apply(
         lambda x: list((root_path / x).glob("*.png"))
     )
-    samples = samples.explode("c23_path", ignore_index=True)
-    samples["c23_path"] = samples["c23_path"].apply(
+    samples = samples.explode("c40_path", ignore_index=True)
+    samples["c40_path"] = samples["c40_path"].apply(
         lambda x: Path(x).relative_to(root_path).as_posix()
     )
 
     # add multiclass label column
     manipulations = ["NeuralTextures", "Face2Face", "Deepfakes", "FaceSwap"]
     man_to_label = {manipulations[i]: i + 1 for i in range(len(manipulations))}
-    samples["mc_label"] = samples["c23_path"].apply(
+    samples["mc_label"] = samples["c40_path"].apply(
         lambda x: (
             man_to_label[x.split("/")[1]] if x.split("/")[1] in manipulations else 0
         )
     )
 
-    # rename c23_path to relative_path
-    samples.rename(columns={"c23_path": "relative_path"}, inplace=True)
+    # rename c40_path to relative_path
+    samples.rename(columns={"c40_path": "relative_path"}, inplace=True)
     samples = (
         samples.sample(frac=1)
         .reset_index(drop=True)
